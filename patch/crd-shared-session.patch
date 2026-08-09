@@ -1,0 +1,67 @@
+--- /opt/google/chrome-remote-desktop/chrome-remote-desktop.backup-shared	2026-08-09 12:29:05.385293953 +0100
++++ /opt/google/chrome-remote-desktop/chrome-remote-desktop	2026-08-09 12:30:29.110580839 +0100
+@@ -779,10 +779,13 @@
+     that time has passed."""
+     logging.info("Setting up and launching session")
+     self._setup_gnubby()
+-    self._launch_server(server_args)
+-    if not self._launch_pre_session():
+-      # If there was no pre-session script, launch the session immediately.
+-      self.launch_desktop_session()
++    # PATCH: attach to the existing console session instead of creating a new
++    # virtual display and desktop. See launch_session() in XDesktop for the
++    # display/XAUTHORITY selection.
++    # self._launch_server(server_args)
++    # if not self._launch_pre_session():
++    #   # If there was no pre-session script, launch the session immediately.
++    #   self.launch_desktop_session()
+     self.server_inhibitor.record_started(MINIMUM_PROCESS_LIFETIME,
+                                       backoff_time)
+     self.session_inhibitor.record_started(MINIMUM_PROCESS_LIFETIME,
+@@ -1542,6 +1545,14 @@
+ 
+   def launch_session(self, *args, **kwargs):
+     logging.info("Launching X server and X session.")
++    # PATCH: share the existing console session. Point the child environment at
++    # the display owned by this user's gdm-managed X server.
++    display = _get_console_display()
++    xauth = "/run/user/%d/gdm/Xauthority" % os.getuid()
++    logging.info("PATCH: attaching to existing display %s (XAUTHORITY=%s)"
++                 % (display, xauth))
++    self.child_env["DISPLAY"] = display
++    self.child_env["XAUTHORITY"] = xauth
+     super(XDesktop, self).launch_session(*args, **kwargs)
+ 
+   # Returns child environment not containing TMPDIR.
+@@ -1879,6 +1890,31 @@
+       # current user.
+       return ["/bin/sh", script]
+ 
++def _get_console_display():
++  """Return the display number of the user's gdm-managed console X server.
++
++  The gdm login session runs an X server owned by the logged-in user with
++  authority from '/run/user/<uid>/gdm/Xauthority'. Probe candidate displays
++  and return the first one that responds to that authority.
++  """
++  xauth = "/run/user/%d/gdm/Xauthority" % os.getuid()
++  if os.path.exists(xauth):
++    for num in range(16):
++      env = dict(os.environ)
++      env["DISPLAY"] = ":%d" % num
++      env["XAUTHORITY"] = xauth
++      try:
++        exit_code = subprocess.call("xdpyinfo", env=env,
++                                    stdout=subprocess.DEVNULL,
++                                    stderr=subprocess.DEVNULL)
++        if exit_code == 0:
++          return ":%d" % num
++      except OSError:
++        break
++  # Fall back to the most common console display.
++  return ":1"
++
++
+ def choose_x_session():
+   """Chooses the most appropriate X session command for this system.
+ 
