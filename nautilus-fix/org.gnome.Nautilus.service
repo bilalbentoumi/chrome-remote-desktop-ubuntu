@@ -1,0 +1,8 @@
+[Unit]
+Description=GNOME Files (console session)
+
+[Service]
+Type=dbus
+BusName=org.gnome.Nautilus
+ExecStart=/home/bilalbentoumi/.local/share/crd-session/nautilus-console
+Restart=on-failure

@@ -1,0 +1,13 @@
+[Unit]
+Description=Chrome Remote Desktop (shared console session)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/opt/google/chrome-remote-desktop/chrome-remote-desktop --child-process --config=%h/.config/chrome-remote-desktop/host#HOST_HASH.json --start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

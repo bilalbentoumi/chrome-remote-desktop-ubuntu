@@ -38,9 +38,10 @@ See `patch/crd-shared-session.patch` (unified diff). Three changes to
   `patch -p1` inside the package dir, or use the helper scripts).
 - `patch/chrome-remote-desktop-original` — pristine packaged script.
 - `patch/chrome-remote-desktop-patched` — ready-to-install patched script.
-- `apply.sh` — backs nothing, just copies the patched script into place and
-  restarts the service.
-- `revert.sh` — restores the original script and restarts the service.
+- `crd-start/` — post-login CRD start (user systemd unit + setup/disable scripts).
+- `nautilus-fix/` — Nautilus (GNOME Files) DBus activation fix.
+- `apply.sh` — copies the patched script into place and installs `crd-start/`.
+- `revert.sh` — restores the original script and re-enables the boot service.
 
 ## Usage
 
@@ -50,12 +51,39 @@ cd ~/Workspace/chrome-remote-desktop-shared-session
 ./revert.sh
 ```
 
+After `apply.sh`, reboot or just log into the GNOME console session: CRD
+starts automatically once `graphical-session.target` is reached.
+
+## How CRD is started after the fix
+
+The packaged boot service `chrome-remote-desktop@<user>` is **disabled**,
+because it starts before the console X session exists — the CRD PAM session
+then blocks GDM login. Instead `crd-start/setup.sh` installs a user-level unit
+(`~/.config/systemd/user/chrome-remote-desktop-console.service`) that is
+`WantedBy=graphical-session.target`, so it runs right after the user logs into
+the console GNOME session and attaches CRD to the real display. `--child-process`
+makes the host run directly in the user session instead of relaunching itself
+via root systemd, and the explicit `--config` pins the host's canonical config
+(`host#<md5-of-hostname>.json`, computed by `setup.sh`).
+
+Related commands:
+
+```bash
+~/Workspace/chrome-remote-desktop-shared-session/crd-start/setup.sh   # (re)install
+~/Workspace/chrome-remote-desktop-shared-session/crd-start/disable.sh # stop + disable
+```
+
 ## Requirements
 
 - Console must be logged into a GNOME session owned by the same user (the
   session runs its X server with `/run/user/<uid>/gdm/Xauthority`).
 - The console must stay logged in; the remote view is a mirror of that session.
 - The user's account needs sudo.
+
+## Related fix: Nautilus (GNOME Files) activation
+
+DBus-activated apps can fail with "Failed to open display" after the shared-
+session setup. See `nautilus-fix/` for the Nautilus fix and its `setup.sh`.
 
 ## Caveats
 
